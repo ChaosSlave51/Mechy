@@ -3,40 +3,21 @@ version 41
 __lua__
 //events
 function _init()
-	player=newplayer()
-	enemies={
-		newenemy(0,0),
-		newenemy(128,128)
-	}
-
-	enemyrate=60
-	enemycooldown=60
-	score=0
-	bullets={}
+	game = newgame()
 	music(1,0,2)
 end
 
 function _update()
-	player:update()
-	// bullets
-	
- for bullet in all(bullets) do
+	game.player:update()
+ for bullet in all(game.bullets) do
  	bullet:update()
 	end
+	game.hammer:update()
 	
-	//enemy spawner
-	if(enemycooldown>0)then
-			enemycooldown-=1
-	else
-		borderpoint=randomborderpoint(128,128)
-	 add(enemies,newenemy(borderpoint.x,borderpoint.y))
-	 enemycooldown=enemyrate
- end
-	
-	//enemy
-	for enemy in all(enemies) do
+	for enemy in all(game.enemies) do
 		enemy:update()		
-	end	
+	end
+	game:update()	
 end
 
 function _draw()
@@ -44,20 +25,20 @@ function _draw()
 	map( 0, 0, 0, 0, 128, 64 )
 	map( 0, 0, 0, 64, 128, 64 )
 	
-	player:draw()
+	game.player:draw()
 	
 	//bullets
-	for bullet in all(bullets) do
+	for bullet in all(game.bullets) do
 		bullet:draw()
 	end	
-	
+	game.hammer:draw()	
 	//enemies
-	for enemy in all(enemies) do
+	for enemy in all(game.enemies) do
 		enemy:draw()
 	end
 	//ui
-	rectfill(0,0,player.life*2,4,10)
-	print(score,70,0,9)
+	rectfill(0,0,game.player.life*2,4,10)
+	print(game.score,70,0,9)
 end
 
 
@@ -66,20 +47,14 @@ end
 -->8
 //helpers
 function compare(a,b)
-	if(a>b) then 
-		return 1 
-	end
-		if(a<b) then return -1 
-	end
+	if (a>b) return 1 
+	if (a<b) return -1 
 	return 0
 end
 
 function fuzzycompare(a,b,fuzz)
-	if(rnd(100)<fuzz) then
-		return flr(rnd(3))-1
-	else
-		return compare(a,b)
-	end	
+	if(rnd(100)<fuzz) return flr(rnd(3))-1
+	return compare(a,b)
 end
 
 function pickframe(frames, cps)
@@ -183,21 +158,28 @@ function findclosest(pos, item_list)
 end
 -->8
 //enemy
-function newenemy(x,y)
+function neweasyenemy(x,y)
+	 return newenemy(x,y,{128,129,130},2)
+end
+function newhardenemy(x,y)
+		return newenemy(x,y,{144,145,146},3)
+end
+
+function newenemy(x,y,sprites,life)
 		return {
 			pos={x=x,y=y},
 			hitbox={x=1,y=1,h=6,w=6},
 			speed=1,
-			sprites={128,129,130},
+			sprites=sprites,
 			cps=3,
-			life=2,
+			life=life,
 			update=function(self)
 				
-				self.pos.x+=self.speed*fuzzycompare(player.pos.x,self.pos.x,50)
-				self.pos.y+=self.speed*fuzzycompare(player.pos.y,self.pos.y,50)
+				self.pos.x+=self.speed*fuzzycompare(game.player.pos.x,self.pos.x,50)
+				self.pos.y+=self.speed*fuzzycompare(game.player.pos.y,self.pos.y,50)
 				
-				if(collide(player,self)) then
-					player:damage()
+				if(collide(game.player,self)) then
+					game.player:damage()
 				end
 				
 					
@@ -210,9 +192,8 @@ function newenemy(x,y)
 			damage=function(self)
 				self.life-=1
 				if(self.life<1) then
-					del(enemies,self)
-					enemyrate-=1
-					score+=1
+					del(game.enemies,self)
+					game:enemydied()
 				end
 				sfx(12)
 			end
@@ -235,41 +216,31 @@ function newplayer()
 		firerate=30,
 		firecooldown=30,	
 		update=function(self)
+			if(self.life<1) return
 			//move
-			if btn(➡️) then
-				self.pos.x+=self.speed
-				self.moving=true
-			end
-			if btn(⬅️) then
-				self.pos.x-=self.speed
-				self.moving=true
-			end
-			if btn(⬆️) then
-				self.pos.y-=self.speed
-				self.moving=true
-			end
-			if btn(⬇️) then
-				self.pos.y+=self.speed
-				self.moving=true
-			end	
+			if (btn(➡️)) self.pos.x+=self.speed
+			if (btn(⬅️)) self.pos.x-=self.speed
+			if (btn(⬆️)) self.pos.y-=self.speed
+			if (btn(⬇️)) self.pos.y+=self.speed
 			//handle iframes
-			self.invincible=max(0,self.invincible-1)
+			self.invincible-=1
 			
 			//shoot
-			if(count(enemies)>0)then
+			if(count(game.enemies)>0)then
 				if(self.firecooldown>0)then
 					self.firecooldown-=1
 			else
-			 add(bullets,newbullet
+			 add(game.bullets,newbullet
 			 	({x=self.pos.x,y=self.pos.y}
-			 	,getunitvector(self, findclosest(self.pos,enemies))))
+			 	,getunitvector(self, findclosest(self.pos,game.enemies))))
 			 self.firecooldown=self.firerate
 		 end
+		 
  end
 		end,
 		draw=function(self)
 			if(self.life>0) then
-				if(self.invincible==0 or rnd(1)>.5) then
+				if(self.invincible<1 or rnd(1)>.5) then
 					spr(pickframe
 						(self.sprites,self.cps)
 						,self.pos.x,self.pos.y)			
@@ -279,7 +250,7 @@ function newplayer()
 		end
 	end,
 	damage=function(self)
-		if(player.invincible==0)then
+		if(game.player.invincible<1)then
 			self.life-=1
 			self.invincible=self.iframes
 			sfx(11)
@@ -303,12 +274,8 @@ function newbullet(pos,vector)
 			if(onscreen(self)==false)then
 				del(bullets,self)
 			end
-			for enemy in all(enemies) do
-				if(collide(enemy,self)) then
-					self:damage()
-					enemy:damage()				
-				end
-			end
+			damageenemies(self)
+			
 		end,		
 			
 		draw=function(self)
@@ -317,11 +284,99 @@ function newbullet(pos,vector)
 					,self.pos.x,self.pos.y)
 		end,
 		damage=function(self)
-			del(bullets,self)
+			del(game.bullets,self)
 		end
 			
 	}
 end
+
+function newhammer()
+	return {
+		pos={x=0,y=0},
+		hitbox={x=3,y=3,h=4,w=4},
+		speed=0.02,
+		cps=1,
+		sprites={16},
+		radius=10,
+		angle=0,
+		iframes=30,
+		invincible=0,
+		update=function(self)
+			self.invincible-=1
+			self.angle = self.angle + self.speed
+	 	self.pos.x = game.player.pos.x 
+	 		+ cos(self.angle) * self.radius
+	 	self.pos.y = game.player.pos.y 
+	 	 + sin(self.angle) * self.radius
+	 	 
+			if(self.invincible<1) then
+				damageenemies(self)
+			end
+		
+		end,
+		draw=function(self)
+			if(self.invincible<1) then
+				spr(pickframe
+					(self.sprites,self.cps)
+						,self.pos.x,self.pos.y)
+			end
+		end,
+		damage=function(self)
+			self.invincible=self.iframes
+		end
+	}
+end
+
+function damageenemies(self)
+	for enemy in all(game.enemies) do
+				if(collide(enemy,self)) then
+					self:damage()
+					enemy:damage()				
+				end
+			end
+end
+-->8
+//game
+function newgame()
+	return 
+	{
+		player=newplayer(),
+		enemies={
+			neweasyenemy(0,0),
+			newhardenemy(128,128)
+		},
+		enemyrate=60,
+		enemycooldown=60,
+		dificulty=1,
+		score=0,
+		bullets={},
+		hammer=newhammer(),
+		update=function(self)
+			//enemy spawner
+			if(self.enemycooldown>0)then
+					self.enemycooldown-=1
+			else
+				local borderpoint=randomborderpoint(128,128)
+			 add(self.enemies,self:getnextenemy(borderpoint.x,borderpoint.y))
+			 self.enemycooldown=self.enemyrate
+		 end
+		end,
+		enemydied=function(self)
+			self.enemyrate-=1
+			self.dificulty+=5
+			self.score+=1
+		end,
+	getnextenemy=function(self,x,y)
+		if(rnd(100)>self.dificulty) then 
+			return neweasyenemy(x,y)
+		else
+			return newhardenemy(x,y)
+		end
+	end
+	}
+	
+end
+
 
 __gfx__
 00c00c0000c00c0000c00c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -334,10 +389,10 @@ __gfx__
 00800800008008000080080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00766700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00766700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -395,6 +450,14 @@ bbb333b3bbbbbbbbbbb33bb3b3bbbb3bbbddddbbbbddddb300000000000000000000000000000000
 00700770007007000770070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00077000000770000007700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00070000070000700000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00001000010000100001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00011000000110000001100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01100100001001000010011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00100110001001000110010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00011000000110000001100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00010000010000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 aaaaaaaaaaaaaaaaaaaaab3b3b3bbb3b3b3bbb3b3b3bbb3b3b3bbb3bbbddddb33b3bbb993b3bbb3b3b3bbb3b3b3bbb3b3b3bbb3b3b3bbb3b3b3bbb3b3b3bbb3b
 aaaaaaaaaaaaaaaaaaaaab3bb33b3b3bb33b3b3bb33b3b3bb33b3b3b3bd7dd3bb33b3b39b33b3b3bb33b3b3bb33b3b3bb33b3b3bb33b3b3bb33b3b3bb33b3b3b
